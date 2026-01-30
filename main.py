@@ -23,10 +23,18 @@ class GoldPriceWorker(QThread):
     data_received = Signal(dict)
     error_occurred = Signal(str)
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._running = True
+
+    def stop(self) -> None:
+        self._running = False
+
     def run(self) -> None:
-        while True:
+        while self._running:
             try:
                 response = requests.get(API_URL, timeout=10)
+                if not self._running: break
                 if response.status_code == 200:
                     data = response.json()
                     if data.get("success") and "resultData" in data:
@@ -36,10 +44,13 @@ class GoldPriceWorker(QThread):
                 else:
                     self.error_occurred.emit(f"HTTP 错误: {response.status_code}")
             except Exception as e:
-                self.error_occurred.emit(f"请求失败: {str(e)}")
+                if self._running:
+                    self.error_occurred.emit(f"请求失败: {str(e)}")
             
-            # Wait for 5 seconds before next update
-            time.sleep(5)
+            # Wait for 5 seconds in small increments to remain responsive to stop
+            for _ in range(50):
+                if not self._running: break
+                time.sleep(0.1)
 
 class ScreenSaverWindow(QMainWindow):
     """The main fullscreen window for the screensaver."""
@@ -149,16 +160,25 @@ class ScreenSaverWindow(QMainWindow):
         self.change_label.setText("数据连接异常")
         self.change_label.setStyleSheet("color: #94a3b8; font-size: 24px;")
 
+    def close_and_exit(self) -> None:
+        """Safely stop the worker thread and exit the application."""
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            self.worker.stop()
+            self.worker.wait(1000) # Wait up to 1s
+        QApplication.quit()
+        # Force exit if quit() is not enough
+        sys.exit(0)
+
     # --- Screen Saver Exit Triggers ---
     
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if not self.is_preview:
-            QApplication.quit()
+            self.close_and_exit()
         super().keyPressEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if not self.is_preview:
-            QApplication.quit()
+            self.close_and_exit()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
@@ -167,8 +187,8 @@ class ScreenSaverWindow(QMainWindow):
             current_pos = event.globalPosition().toPoint()
             if self.last_mouse_pos is None:
                 self.last_mouse_pos = current_pos
-            elif (current_pos - self.last_mouse_pos).manhattanLength() > 10:
-                QApplication.quit()
+            elif (current_pos - self.last_mouse_pos).manhattanLength() > 15:
+                self.close_and_exit()
         super().mouseMoveEvent(event)
 
 def main():
