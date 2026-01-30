@@ -15,7 +15,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QFont, QColor, QMouseEvent, QKeyEvent, QScreen, 
-    QPainter, QPen, QPainterPath, QLinearGradient, QGradient, QCursor
+    QPainter, QPen, QPainterPath, QLinearGradient, QGradient, QCursor, QIcon, QPixmap
 )
 
 # API URL for Gold Price
@@ -23,6 +23,17 @@ API_URL = "https://api.jdjygold.com/gw2/generic/jrm/h5/m/stdLatestPrice?productS
 
 # Enable High DPI scaling
 QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+
+def _make_dot_icon() -> QIcon:
+    pixmap = QPixmap(64, 64)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor("#9CA3AF"))
+    painter.drawEllipse(QRect(26, 26, 12, 12))
+    painter.end()
+    return QIcon(pixmap)
 
 class RollingDigit(QWidget):
     """A single digit that rolls up/down like an odometer."""
@@ -263,6 +274,10 @@ class ScreenSaverWindow(QMainWindow):
         self.last_mouse_pos: Optional[QPoint] = None
         self._cursor_last_pos: Optional[QPoint] = None
         self._exiting = False
+
+        icon = _make_dot_icon()
+        QApplication.setWindowIcon(icon)
+        self.setWindowIcon(icon)
         
         # Configure window properties
         self.setWindowTitle("实时金价windows屏保")
@@ -392,6 +407,8 @@ class ScreenSaverWindow(QMainWindow):
 
         for widget in QApplication.topLevelWidgets():
             if isinstance(widget, QMainWindow):
+                widget.setWindowOpacity(0.0)
+                widget.resize(1, 1)
                 widget.close()
         
         QApplication.processEvents()
