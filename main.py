@@ -10,7 +10,7 @@ from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QPropertyAnimation, Property,
     QEasingCurve, QPoint, QRect, QSize, QParallelAnimationGroup, QSequentialAnimationGroup
 )
-from PySide6.QtGui import QFont, QColor, QMouseEvent, QKeyEvent, QScreen, QPainter, QPen, QPath, QLinearGradient
+from PySide6.QtGui import QFont, QColor, QMouseEvent, QKeyEvent, QScreen, QPainter, QPen, QPainterPath, QLinearGradient
 
 # API URL for Gold Price
 API_URL = "https://api.jdjygold.com/gw2/generic/jrm/h5/m/stdLatestPrice?productSku=1961543816"
@@ -117,7 +117,7 @@ class TrendChart(QWidget):
         max_p, min_p = max(self.history), min(self.history)
         rng = (max_p - min_p) if max_p != min_p else 1
         
-        path = QPath()
+        path = QPainterPath()
         for i, p in enumerate(self.history):
             x = i * (w / (len(self.history) - 1))
             y = h - ((p - min_p) / rng * (h * 0.8) + h * 0.1)
@@ -129,7 +129,7 @@ class TrendChart(QWidget):
         painter.drawPath(path)
         
         # Gradient area
-        grad_path = QPath(path)
+        grad_path = QPainterPath(path)
         grad_path.lineTo(w, h)
         grad_path.lineTo(0, h)
         grad_path.closeSubpath()
