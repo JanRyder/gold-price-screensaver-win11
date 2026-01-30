@@ -8,6 +8,10 @@
 
 一个美观的、基于 PySide6 开发的 Windows 11 风格实时金价显示屏幕保护程序。
 
+### 🚀 快速下载
+- **[点击下载 GoldPriceSaver.scr](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver.scr)**
+  > 下载后右键点击文件，选择“安装”即可使用。
+
 ### 功能特点
 - **实时更新**：每 5 秒从京东 API 获取一次最新的黄金价格。
 - **美观设计**：深色模式、圆角矩形、动态阴影，完美契合 Windows 11 审美。
@@ -49,6 +53,10 @@
 ## English
 
 A beautiful, PySide6-based Windows 11 style real-time gold price screensaver.
+
+### 🚀 Direct Download
+- **[Download GoldPriceSaver.scr](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver.scr)**
+  > After downloading, right-click the file and select "Install" to use.
 
 ### Features
 - **Real-time Updates**: Fetches the latest gold price from JD API every 5 seconds.
