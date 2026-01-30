@@ -28,57 +28,55 @@ class RollingDigit(QWidget):
     """A single digit that rolls up/down like an odometer."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._current_digit = "0"
-        self._offset = 0.0
+        self._value = 0.0 # Odometer-like position
+        self._target_value = 0.0
         self.setFixedWidth(80) 
-        self.setFixedHeight(160) # Reduced height slightly for better control
-        self.anim = QPropertyAnimation(self, b"offset")
-        self.anim.setDuration(800)
+        self.setFixedHeight(160)
+        self.anim = QPropertyAnimation(self, b"value_prop")
+        self.anim.setDuration(1200) # Slower for more smoothness
         self.anim.setEasingCurve(QEasingCurve.Type.OutExpo)
 
     @Property(float)
-    def offset(self): return self._offset
-    @offset.setter
-    def offset(self, value):
-        self._offset = value
+    def value_prop(self): return self._value
+    @value_prop.setter
+    def value_prop(self, val):
+        self._value = val
         self.update()
 
     def setDigit(self, digit: str):
-        if self._current_digit == digit: return
-        target = int(digit) if digit.isdigit() else 0
-        current = int(self._current_digit) if self._current_digit.isdigit() else 0
+        if not digit.isdigit(): return
+        target = float(digit)
         
-        # Determine direction and distance
-        diff = target - current
-        self.anim.stop()
-        self.anim.setStartValue(0.0)
-        self.anim.setEndValue(float(diff))
-        self._target_digit = digit
-        self.anim.start()
-        self.anim.finished.connect(self._on_finished)
+        # Calculate the shortest path for the rolling effect
+        # We allow the internal _value to grow/shrink indefinitely to keep it smooth
+        current_base = int(self._value) // 10 * 10
+        target_abs = current_base + target
+        
+        # Adjust target to minimize distance from current _value
+        while target_abs - self._value > 5: target_abs -= 10
+        while target_abs - self._value < -5: target_abs += 10
+        
+        if abs(target_abs - self._value) < 0.01: return
 
-    def _on_finished(self):
-        self._current_digit = self._target_digit
-        self._offset = 0.0
-        self.update()
+        self.anim.stop()
+        self.anim.setStartValue(self._value)
+        self.anim.setEndValue(target_abs)
+        self.anim.start()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        # Use slightly smaller font relative to height to prevent overlap
         painter.setFont(QFont("'Segoe UI Variable Display', 'Inter'", 90, QFont.Weight.Bold))
         painter.setPen(QColor("#FFFFFF"))
         
         h = self.height()
-        current_val = int(self._current_digit) if self._current_digit.isdigit() else 0
-        
-        # Draw digits with larger vertical spacing (1.0 * h)
+        # Draw digits around the current floating _value
         for i in range(-2, 3):
-            digit_to_draw = (current_val + i) % 10
-            # Calculate Y position: center is h/2
-            y_pos = h/2 + (i - self._offset) * h
+            val_to_draw = int(self._value + i + 0.5)
+            digit = val_to_draw % 10
+            y_pos = h/2 + (val_to_draw - self._value) * h
             rect = QRect(0, int(y_pos - h/2), self.width(), h)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(digit_to_draw) if self._current_digit.isdigit() else self._current_digit)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(digit))
 
 class RollingNumber(QWidget):
     """A widget composed of multiple rolling digits."""
@@ -212,9 +210,10 @@ class GoldPriceWorker(QThread):
 class ScreenSaverWindow(QMainWindow):
     """The main fullscreen window for the screensaver."""
     
-    def __init__(self, is_preview: bool = False) -> None:
+    def __init__(self, is_preview: bool = False, run_worker: bool = True) -> None:
         super().__init__()
         self.is_preview = is_preview
+        self.run_worker = run_worker
         self.last_mouse_pos: Optional[QPoint] = None
         
         # Configure window properties
@@ -227,11 +226,14 @@ class ScreenSaverWindow(QMainWindow):
         
         self.init_ui()
         
-        # Start worker thread
-        self.worker = GoldPriceWorker()
-        self.worker.data_received.connect(self.update_price)
-        self.worker.error_occurred.connect(self.handle_error)
-        self.worker.start()
+        # Only start worker thread on the main window to save resources and avoid exit issues
+        if self.run_worker:
+            self.worker = GoldPriceWorker()
+            self.worker.data_received.connect(self.update_price)
+            self.worker.error_occurred.connect(self.handle_error)
+            self.worker.start()
+        else:
+            self.change_label.setText("同步中...")
 
     def init_ui(self) -> None:
         """Initialize a sleek iOS-like UI with pure black background."""
@@ -372,18 +374,16 @@ def main():
     
     for i, screen in enumerate(screens):
         is_main = (i == 0)
-        win = ScreenSaverWindow(is_preview=False)
+        # Only the first window runs the background worker
+        win = ScreenSaverWindow(is_preview=False, run_worker=is_main)
         
         # Position the window on the specific screen
         geom = screen.geometry()
         win.setGeometry(geom)
         
-        if is_main:
-            # Only the main window needs the API worker to avoid redundant requests
-            pass
-        else:
-            # Secondary windows can just display a static message or copy the main one
-            # For simplicity, we'll let all windows have their own worker for now
+        if not is_main:
+            # Secondary screens can show a simple black screen or a mirrored view
+            # For now, we'll just show the same UI but without its own API worker
             pass
             
         win.showFullScreen()
