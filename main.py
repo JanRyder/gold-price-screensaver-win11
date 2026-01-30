@@ -61,7 +61,7 @@ class ScreenSaverWindow(QMainWindow):
         self.last_mouse_pos: Optional[QPoint] = None
         
         # Configure window properties
-        self.setWindowTitle("实时金价屏保")
+        self.setWindowTitle("实时金价windows屏保")
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         
         if not self.is_preview:

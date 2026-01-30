@@ -1,4 +1,4 @@
-# Gold Price Screensaver (Win11 Style) | 实时金价屏保 (Win11 风格)
+# 实时金价windows屏保 (Win11 Style)
 
 [English](#english) | [中文](#中文)
 
@@ -6,7 +6,7 @@
 
 ## 中文
 
-一个美观的、基于 PySide6 开发的 Windows 11 风格实时金价显示屏幕保护程序。
+一个美观的、基于 PySide6 开发的 Windows 11 风格实时金价显示屏幕保护程序。**数据来源于京东金融**。
 
 ### 🚀 快速下载
 - **[点击下载 GoldPriceSaver.scr](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver.scr)**
@@ -59,7 +59,7 @@
 
 ## English
 
-A beautiful, PySide6-based Windows 11 style real-time gold price screensaver.
+A beautiful, PySide6-based Windows 11 style real-time gold price screensaver. **Data provided by JD Finance**.
 
 ### 🚀 Direct Download
 - **[Download GoldPriceSaver.scr](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver.scr)**
