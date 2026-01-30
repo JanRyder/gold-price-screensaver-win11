@@ -15,7 +15,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QFont, QColor, QMouseEvent, QKeyEvent, QScreen, 
-    QPainter, QPen, QPainterPath, QLinearGradient, QGradient, QCursor, QIcon, QPixmap
+    QPainter, QPen, QPainterPath, QLinearGradient, QGradient, QCursor
 )
 
 # API URL for Gold Price
@@ -23,17 +23,6 @@ API_URL = "https://api.jdjygold.com/gw2/generic/jrm/h5/m/stdLatestPrice?productS
 
 # Enable High DPI scaling
 QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-
-def _make_dot_icon() -> QIcon:
-    pixmap = QPixmap(64, 64)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QColor("#9CA3AF"))
-    painter.drawEllipse(QRect(26, 26, 12, 12))
-    painter.end()
-    return QIcon(pixmap)
 
 class RollingDigit(QWidget):
     """A single digit that rolls up/down like an odometer."""
@@ -274,10 +263,6 @@ class ScreenSaverWindow(QMainWindow):
         self.last_mouse_pos: Optional[QPoint] = None
         self._cursor_last_pos: Optional[QPoint] = None
         self._exiting = False
-
-        icon = _make_dot_icon()
-        QApplication.setWindowIcon(icon)
-        self.setWindowIcon(icon)
         
         # Configure window properties
         self.setWindowTitle("实时金价windows屏保")
@@ -398,22 +383,26 @@ class ScreenSaverWindow(QMainWindow):
             return
         self._exiting = True
 
+        # 1. Stop all timers and hide ALL windows immediately
         if hasattr(self, "_cursor_timer"):
             self._cursor_timer.stop()
-
-        if hasattr(self, "worker") and self.worker.isRunning():
-            self.worker.stop()
-            self.worker.wait(800)
-
+            
         for widget in QApplication.topLevelWidgets():
-            if isinstance(widget, QMainWindow):
-                widget.setWindowOpacity(0.0)
-                widget.resize(1, 1)
+            if isinstance(widget, QWidget):
+                widget.hide()
                 widget.close()
         
+        # 2. Process events to ensure windows are removed from screen
         QApplication.processEvents()
-        QTimer.singleShot(0, QApplication.quit)
-        QTimer.singleShot(1500, lambda: os._exit(0))
+
+        # 3. Stop worker thread
+        if hasattr(self, "worker") and self.worker.isRunning():
+            self.worker.stop()
+            self.worker.wait(300)
+
+        # 4. Final aggressive exit
+        # Using os._exit(0) to bypass any PySide cleanup hangs
+        os._exit(0)
 
     # --- Screen Saver Exit Triggers ---
     
@@ -441,6 +430,10 @@ class ScreenSaverWindow(QMainWindow):
         super().mouseMoveEvent(event)
 
 def main():
+    # Recommended for frozen executables
+    import multiprocessing
+    multiprocessing.freeze_support()
+    
     app = QApplication(sys.argv)
     
     # Handle Windows Screen Saver arguments

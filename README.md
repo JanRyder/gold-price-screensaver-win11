@@ -12,11 +12,23 @@
 - **[点击下载 GoldPriceSaver.scr](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver.scr)**
   > 下载后右键点击文件，选择“安装”即可使用。
 
-### ✅ 彻底去掉 “(2) 进程” 的版本（推荐）
-如果你不希望任务管理器中显示 `GoldPriceSaver.scr (2)`（PyInstaller onefile 在 Windows 的正常行为），请使用 **便携版（单进程）**：
+### ✅ 彻底解决“(2) 进程”和“残存界面”的方案
+如果你希望任务管理器中**只显示 1 个进程**，且完全避免退出时的残存黑框，请根据你的需求选择：
+
+#### 方案 A：使用 Nuitka 编译（推荐：单文件 + 单进程）
+Nuitka 是比 PyInstaller 更先进的工具，它将 Python 代码编译为真正的 C++ 可执行文件，不会像 PyInstaller 那样通过解压临时文件运行（这正是产生 2 个进程的原因）。
+1. **安装 Nuitka**: `pip install -U nuitka`
+2. **安装 C++ 编译器**: (如果提示需要，请按提示下载安装，或安装 [Visual Studio Community](https://visualstudio.microsoft.com/zh-hans/vs/community/))
+3. **执行编译**:
+   ```bash
+   python -m nuitka --standalone --onefile --windows-disable-console --enable-plugin=pyside6 --output-filename=GoldPriceSaver.exe main.py
+   ```
+4. **效果**: 编译出的 `GoldPriceSaver.exe`（改名为 `.scr`）在任务管理器中**只显示 1 个进程**。
+
+#### 方案 B：便携版（单进程）
+如果你不想编译，请直接使用我们准备好的便携版：
 - **[点击下载 GoldPriceSaver-portable.zip](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver-portable.zip)**
-  - 解压后运行 `Install-Screensaver.ps1`，它会把屏保路径写入注册表（无需复制到 System32）
-  - Windows 会从该路径启动屏保，进程只显示 1 个
+  - 解压后运行 `Install-Screensaver.ps1`。这种方式也是单进程运行，且启动速度最快。
 
 ### ⚠️ 无法安装/打开的解决方法
 如果你遇到“Windows 已保护你的电脑”或无法双击打开的情况，请尝试：
@@ -78,10 +90,21 @@ A beautiful, PySide6-based Windows 11 style real-time gold price screensaver. **
 - **[Download GoldPriceSaver.scr](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver.scr)**
   > After downloading, right-click the file and select "Install" to use.
 
-### ✅ Portable (Single-process) Build
-If you don't want to see `GoldPriceSaver.scr (2)` in Task Manager (expected behavior of PyInstaller onefile on Windows), use the **portable single-process build**:
+### ✅ Solve "(2) Processes" & "Residual UI" Issues
+If you want **only 1 process** in Task Manager and want to avoid any residual black frames upon exit:
+
+#### Option A: Use Nuitka (Recommended: Single-file + Single-process)
+Nuitka compiles Python to a native C++ executable, avoiding the "bootloader + extraction" architecture of PyInstaller (which causes the 2-process issue).
+1. **Install Nuitka**: `pip install -U nuitka`
+2. **Build**:
+   ```bash
+   python -m nuitka --standalone --onefile --windows-disable-console --enable-plugin=pyside6 --output-filename=GoldPriceSaver.exe main.py
+   ```
+
+#### Option B: Portable Version (Single-process)
+If you prefer not to compile, use the portable build:
 - **[Download GoldPriceSaver-portable.zip](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver-portable.zip)**
-  - Unzip and run `Install-Screensaver.ps1` to register the `.scr` path via registry (no need to copy into System32)
+  - Unzip and run `Install-Screensaver.ps1`.
 
 ### ⚖️ Legal Disclaimer
 - **Data Source**: Data is fetched from JD Finance public API. For educational and personal use only.
