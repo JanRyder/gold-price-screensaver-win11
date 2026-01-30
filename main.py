@@ -2,6 +2,8 @@ import sys
 import os
 import requests
 import time
+import ctypes
+from ctypes import wintypes
 from typing import Optional, Dict, Any
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, 
@@ -26,12 +28,13 @@ QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPo
 
 class RollingDigit(QWidget):
     """A single digit that rolls up/down like an odometer."""
-    def __init__(self, parent=None):
+    def __init__(self, font_size: int = 90, parent=None):
         super().__init__(parent)
         self._value = 0.0 # Odometer-like position
         self._target_value = 0.0
-        self.setFixedWidth(80) 
-        self.setFixedHeight(160)
+        self.font_size = font_size
+        self.setFixedWidth(int(font_size * 0.9)) 
+        self.setFixedHeight(int(font_size * 1.8))
         self.anim = QPropertyAnimation(self, b"value_prop")
         self.anim.setDuration(1200) # Slower for more smoothness
         self.anim.setEasingCurve(QEasingCurve.Type.OutExpo)
@@ -66,7 +69,7 @@ class RollingDigit(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setFont(QFont("'Segoe UI Variable Display', 'Inter'", 90, QFont.Weight.Bold))
+        painter.setFont(QFont("'Segoe UI Variable Display', 'Inter'", self.font_size, QFont.Weight.Bold))
         painter.setPen(QColor("#FFFFFF"))
         
         h = self.height()
@@ -80,8 +83,9 @@ class RollingDigit(QWidget):
 
 class RollingNumber(QWidget):
     """A widget composed of multiple rolling digits."""
-    def __init__(self, parent=None):
+    def __init__(self, font_size: int = 80, parent=None):
         super().__init__(parent)
+        self.font_size = font_size
         self.layout = QHBoxLayout(self)
         self.layout.setSpacing(2) # Add small spacing between digits
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -102,13 +106,13 @@ class RollingNumber(QWidget):
             for char in value:
                 if char in ".¥":
                     lbl = QLabel(char)
-                    lbl.setStyleSheet("color: white; font-size: 80px; font-weight: bold;")
-                    lbl.setFixedWidth(45)
+                    lbl.setStyleSheet(f"color: white; font-size: {self.font_size}px; font-weight: bold;")
+                    lbl.setFixedWidth(int(self.font_size * 0.55))
                     lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     self.layout.addWidget(lbl)
                     self.digits.append(lbl)
                 else:
-                    d = RollingDigit()
+                    d = RollingDigit(font_size=int(self.font_size * 1.1))
                     self.layout.addWidget(d)
                     self.digits.append(d)
         
@@ -305,34 +309,49 @@ class ScreenSaverWindow(QMainWindow):
         self.central_widget.setStyleSheet("background-color: #000000;")
         
         self.main_layout = QVBoxLayout(self.central_widget)
-        self.main_layout.setContentsMargins(100, 100, 100, 100)
-        self.main_layout.setSpacing(40)
         
+        # Adjust layout for preview mode (very small window)
+        if self.is_preview:
+            self.main_layout.setContentsMargins(10, 10, 10, 10)
+            self.main_layout.setSpacing(5)
+            title_size, time_size, price_size, change_size = 10, 8, 24, 12
+        else:
+            self.main_layout.setContentsMargins(100, 100, 100, 100)
+            self.main_layout.setSpacing(40)
+            title_size, time_size, price_size, change_size = 28, 24, 80, 36
+
         # Header: Title and Time
         self.header_layout = QHBoxLayout()
         self.title_label = QLabel("京东金融 · 实时金价")
-        self.title_label.setStyleSheet("color: #666666; font-size: 28px; font-weight: 500;")
+        self.title_label.setStyleSheet(f"color: #666666; font-size: {title_size}px; font-weight: 500;")
         self.time_label = QLabel("")
-        self.time_label.setStyleSheet("color: #444444; font-size: 24px;")
+        self.time_label.setStyleSheet(f"color: #444444; font-size: {time_size}px;")
         self.header_layout.addWidget(self.title_label)
         self.header_layout.addStretch()
         self.header_layout.addWidget(self.time_label)
         
         # Price Area
-        self.price_widget = RollingNumber()
+        self.price_widget = RollingNumber(font_size=price_size)
+        if self.is_preview:
+            self.price_widget.setFixedHeight(50)
         
         # Trend Chart
         self.chart = TrendChart()
+        if self.is_preview:
+            self.chart.setMinimumHeight(40)
         
         # Change & Info
         self.info_layout = QHBoxLayout()
-        self.change_label = QLabel("正在同步数据...")
-        self.change_label.setStyleSheet("color: #444444; font-size: 36px; font-weight: 600;")
-        self.disclaimer_label = QLabel("数据仅供参考，不构成投资建议。")
-        self.disclaimer_label.setStyleSheet("color: #222222; font-size: 14px;")
+        self.change_label = QLabel("同步中...")
+        self.change_label.setStyleSheet(f"color: #444444; font-size: {change_size}px; font-weight: 600;")
+        
+        self.disclaimer_label = QLabel("数据仅供参考")
+        self.disclaimer_label.setStyleSheet(f"color: #222222; font-size: {8 if self.is_preview else 14}px;")
+        
         self.info_layout.addWidget(self.change_label)
         self.info_layout.addStretch()
-        self.info_layout.addWidget(self.disclaimer_label, alignment=Qt.AlignmentFlag.AlignBottom)
+        if not self.is_preview:
+            self.info_layout.addWidget(self.disclaimer_label, alignment=Qt.AlignmentFlag.AlignBottom)
         
         self.main_layout.addLayout(self.header_layout)
         self.main_layout.addStretch(1)
@@ -455,12 +474,47 @@ def main():
         sys.exit(0)
 
     if mode == "preview":
-        # In a real preview, we should embed into the passed HWND.
-        # For now, just show a small window to avoid crashing.
-        window = ScreenSaverWindow(is_preview=True)
-        window.setFixedSize(400, 300)
-        window.show()
-        sys.exit(app.exec())
+        # Extract parent HWND from arguments like /p 12345 or /p:12345
+        parent_hwnd = None
+        for i, arg in enumerate(args):
+            if arg.lower().startswith("/p:"):
+                try: parent_hwnd = int(arg[3:])
+                except: pass
+            elif arg.lower() == "/p" and i + 1 < len(args):
+                try: parent_hwnd = int(args[i+1])
+                except: pass
+        
+        if parent_hwnd:
+            window = ScreenSaverWindow(is_preview=True)
+            try:
+                # 1. Get client area of the preview monitor in settings dialog
+                rect = wintypes.RECT()
+                ctypes.windll.user32.GetClientRect(parent_hwnd, ctypes.byref(rect))
+                
+                # 2. Force the window to be a child of the settings dialog
+                window.show() # Create winId
+                ctypes.windll.user32.SetParent(int(window.winId()), parent_hwnd)
+                
+                # 3. Modify window style to be a child (WS_CHILD)
+                GWL_STYLE = -16
+                WS_CHILD = 0x40000000
+                style = ctypes.windll.user32.GetWindowLongW(int(window.winId()), GWL_STYLE)
+                ctypes.windll.user32.SetWindowLongW(int(window.winId()), GWL_STYLE, style | WS_CHILD)
+                
+                # 4. Resize to fit the preview area
+                window.setGeometry(0, 0, rect.right, rect.bottom)
+                
+                # 5. Monitor parent window - if it's gone, we exit
+                timer = QTimer(window)
+                timer.timeout.connect(lambda: os._exit(0) if not ctypes.windll.user32.IsWindow(parent_hwnd) else None)
+                timer.start(1000)
+                
+                sys.exit(app.exec())
+            except Exception:
+                os._exit(0)
+        else:
+            # If no HWND or error, don't show anything in preview mode
+            os._exit(0)
 
     # Multi-monitor support for 'saver' or 'run' mode
     screens = app.screens()
