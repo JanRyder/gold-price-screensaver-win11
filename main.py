@@ -30,8 +30,8 @@ class RollingDigit(QWidget):
         super().__init__(parent)
         self._current_digit = "0"
         self._offset = 0.0
-        self.setFixedWidth(85) # Increased from 60 to prevent clipping
-        self.setFixedHeight(200) # Increased from 180
+        self.setFixedWidth(80) 
+        self.setFixedHeight(160) # Reduced height slightly for better control
         self.anim = QPropertyAnimation(self, b"offset")
         self.anim.setDuration(800)
         self.anim.setEasingCurve(QEasingCurve.Type.OutExpo)
@@ -65,17 +65,19 @@ class RollingDigit(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setFont(QFont("'Segoe UI Variable Display', 'Inter'", 110, QFont.Weight.Bold))
+        # Use slightly smaller font relative to height to prevent overlap
+        painter.setFont(QFont("'Segoe UI Variable Display', 'Inter'", 90, QFont.Weight.Bold))
         painter.setPen(QColor("#FFFFFF"))
         
         h = self.height()
         current_val = int(self._current_digit) if self._current_digit.isdigit() else 0
         
-        # Draw current, previous, and next digits for smooth scrolling
+        # Draw digits with larger vertical spacing (1.0 * h)
         for i in range(-2, 3):
             digit_to_draw = (current_val + i) % 10
-            y = h/2 + (i - self._offset) * h * 0.75
-            rect = QRect(0, int(y - h/2), self.width(), h)
+            # Calculate Y position: center is h/2
+            y_pos = h/2 + (i - self._offset) * h
+            rect = QRect(0, int(y_pos - h/2), self.width(), h)
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(digit_to_draw) if self._current_digit.isdigit() else self._current_digit)
 
 class RollingNumber(QWidget):
@@ -83,7 +85,7 @@ class RollingNumber(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.layout = QHBoxLayout(self)
-        self.layout.setSpacing(0)
+        self.layout.setSpacing(2) # Add small spacing between digits
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.digits = []
         self._value = ""
@@ -92,20 +94,25 @@ class RollingNumber(QWidget):
         if value == self._value: return
         
         # Sync digits
-        while len(self.digits) < len(value):
-            idx = len(self.digits)
-            char = value[idx]
-            if char in ".¥":
-                lbl = QLabel(char)
-                lbl.setStyleSheet("color: white; font-size: 110px; font-weight: bold; margin-bottom: 25px;")
-                lbl.setFixedWidth(50) # Slightly wider
-                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.layout.addWidget(lbl)
-                self.digits.append(lbl)
-            else:
-                d = RollingDigit()
-                self.layout.addWidget(d)
-                self.digits.append(d)
+        if len(self.digits) != len(value):
+            # Clear and rebuild to avoid layout issues
+            while self.layout.count():
+                item = self.layout.takeAt(0)
+                if item.widget(): item.widget().deleteLater()
+            self.digits = []
+            
+            for char in value:
+                if char in ".¥":
+                    lbl = QLabel(char)
+                    lbl.setStyleSheet("color: white; font-size: 80px; font-weight: bold;")
+                    lbl.setFixedWidth(45)
+                    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.layout.addWidget(lbl)
+                    self.digits.append(lbl)
+                else:
+                    d = RollingDigit()
+                    self.layout.addWidget(d)
+                    self.digits.append(d)
         
         for i, char in enumerate(value):
             if isinstance(self.digits[i], RollingDigit) and char.isdigit():
