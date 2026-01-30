@@ -21,10 +21,10 @@
 
 ### 功能特点
 - **实时更新**：每 5 秒从京东金融 API 获取一次最新的黄金价格。
-- **iOS 级数字滚动**：数字变化时采用平滑的垂直滚动动画（Rolling Numbers），极具动感。
-- **动态趋势图**：底部实时绘制价格走势图（Sparkline），波动一目了然。
-- **极致纯黑**：背景采用 OLED 纯黑设计，大幅降低功耗，沉浸感十足。
-- **秒速退出**：优化退出逻辑，确保移动鼠标或按键时瞬间消失，不留任何残余界面。
+- **丝滑滚动数字**：采用 iOS 风格的数字滚动动画，变化过程更自然。
+- **动态趋势图**：实时绘制价格波动曲线，直观展现跌涨趋势。
+- **极简设计**：纯黑背景配合高对比度文字，保护屏幕同时提升质感。
+- **交互逻辑**：支持标准的屏保交互，移动鼠标或按键即可退出。
 
 ### 安装与运行
 1. **克隆仓库**：
@@ -74,10 +74,10 @@ A beautiful, PySide6-based Windows 11 style real-time gold price screensaver. **
 
 ### Features
 - **Real-time Updates**: Fetches the latest gold price from JD Finance API every 5 seconds.
-- **iOS-style Rolling Numbers**: Smooth vertical rolling animation for digits, providing a premium feel.
-- **Dynamic Trend Chart**: Real-time sparkline chart visualizing price fluctuations.
-- **Ultra Pure Black**: Pure black background for OLED screens, minimizing power consumption and maximizing contrast.
-- **Instant Exit**: Optimized exit logic ensuring the screensaver disappears immediately without any residual windows.
+- **Smooth Rolling Numbers**: iOS-style rolling digit animations for a more natural feel.
+- **Dynamic Trend Chart**: Real-time price fluctuation curve to visualize trends.
+- **Minimalist Design**: Pure black background with high contrast text for quality and protection.
+- **Interactive**: Standard screensaver behavior—exit on mouse movement or key press.
 
 ### Installation & Usage
 1. **Clone the repository**:

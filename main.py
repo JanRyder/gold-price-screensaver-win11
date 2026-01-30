@@ -8,10 +8,13 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QPropertyAnimation, 
-    QEasingCurve, QPoint, QSize, QParallelAnimationGroup, QSequentialAnimationGroup,
+    QEasingCurve, QPoint, QPointF, QSize, QParallelAnimationGroup, QSequentialAnimationGroup,
     Property, QRect
 )
-from PySide6.QtGui import QFont, QColor, QMouseEvent, QKeyEvent, QScreen, QPainter, QPen, QLinearGradient, QPathResolver, QPainterPath
+from PySide6.QtGui import (
+    QFont, QColor, QMouseEvent, QKeyEvent, QScreen, 
+    QPainter, QPen, QPainterPath, QLinearGradient, QGradient
+)
 
 # API URL for Gold Price
 API_URL = "https://api.jdjygold.com/gw2/generic/jrm/h5/m/stdLatestPrice?productSku=1961543816"
@@ -20,146 +23,145 @@ API_URL = "https://api.jdjygold.com/gw2/generic/jrm/h5/m/stdLatestPrice?productS
 QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
 class RollingDigit(QWidget):
-    """A single digit that rolls vertically."""
+    """A single digit that rolls up/down like an odometer."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._digit = "0"
+        self._current_digit = "0"
         self._offset = 0.0
-        self.setFixedSize(70, 160) # Matched to font size
-        self.font = QFont("'Segoe UI Variable Display', 'Inter'", 110, QFont.Weight.Bold)
-
-    def get_offset(self): return self._offset
-    def set_offset(self, value):
-        self._offset = value
-        self.update()
-    offset = Property(float, get_offset, set_offset)
-
-    def setDigit(self, digit: str):
-        if self._digit == digit: return
-        
-        target_offset = 1.0 if int(digit) > int(self._digit) or (self._digit=="9" and digit=="0") else -1.0
-        
+        self.setFixedWidth(60)
+        self.setFixedHeight(180)
         self.anim = QPropertyAnimation(self, b"offset")
         self.anim.setDuration(800)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutExpo)
+
+    @Property(float)
+    def offset(self): return self._offset
+    @offset.setter
+    def offset(self, value):
+        self._offset = value
+        self.update()
+
+    def setDigit(self, digit: str):
+        if self._current_digit == digit: return
+        target = int(digit) if digit.isdigit() else 0
+        current = int(self._current_digit) if self._current_digit.isdigit() else 0
+        
+        # Determine direction and distance
+        diff = target - current
+        self.anim.stop()
         self.anim.setStartValue(0.0)
-        self.anim.setEndValue(target_offset)
-        self.anim.setEasingCurve(QEasingCurve.Type.InOutQuart)
-        
-        old_digit = self._digit
-        self._digit = digit
-        self._prev_digit = old_digit
-        
-        self.anim.finished.connect(lambda: self.set_offset(0.0))
+        self.anim.setEndValue(float(diff))
+        self._target_digit = digit
         self.anim.start()
+        self.anim.finished.connect(self._on_finished)
+
+    def _on_finished(self):
+        self._current_digit = self._target_digit
+        self._offset = 0.0
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setFont(self.font)
+        painter.setFont(QFont("'Segoe UI Variable Display', 'Inter'", 110, QFont.Weight.Bold))
         painter.setPen(QColor("#FFFFFF"))
         
         h = self.height()
-        y_center = h / 2 + 40 # Adjustment for font baseline
+        current_val = int(self._current_digit) if self._current_digit.isdigit() else 0
         
-        if self._offset == 0:
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._digit)
-        else:
-            # Draw old digit moving out
-            old_rect = QRect(0, -self._offset * h, self.width(), h)
-            painter.setOpacity(1.0 - abs(self._offset))
-            painter.drawText(old_rect, Qt.AlignmentFlag.AlignCenter, self._prev_digit)
-            
-            # Draw new digit moving in
-            new_rect = QRect(0, h - self._offset * h if self._offset > 0 else -h - self._offset * h, self.width(), h)
-            painter.setOpacity(abs(self._offset))
-            painter.drawText(new_rect, Qt.AlignmentFlag.AlignCenter, self._digit)
+        # Draw current, previous, and next digits for smooth scrolling
+        for i in range(-2, 3):
+            digit_to_draw = (current_val + i) % 10
+            y = h/2 + (i - self._offset) * h * 0.75
+            rect = QRect(0, int(y - h/2), self.width(), h)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(digit_to_draw) if self._current_digit.isdigit() else self._current_digit)
 
 class RollingNumber(QWidget):
-    """A group of RollingDigits for the full price."""
+    """A widget composed of multiple rolling digits."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.layout = QHBoxLayout(self)
         self.layout.setSpacing(0)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.digits = []
-        self._current_val = ""
+        self._value = ""
 
     def setValue(self, value: str):
-        # Format: "¥123.45"
-        if value == self._current_val: return
-        self._current_val = value
+        if value == self._value: return
         
-        # Clear and rebuild if length changes or first time
-        if len(value) != len(self.digits):
-            for i in reversed(range(self.layout.count())):
-                self.layout.itemAt(i).widget().setParent(None)
-            self.digits = []
-            for char in value:
-                if char.isdigit():
-                    d = RollingDigit()
-                    self.digits.append(d)
-                    self.layout.addWidget(d)
-                else:
-                    lbl = QLabel(char)
-                    lbl.setStyleSheet("color: white; font-size: 110px; font-weight: bold;")
-                    self.layout.addWidget(lbl)
-                    self.digits.append(lbl)
+        # Sync digits
+        while len(self.digits) < len(value):
+            if value[len(self.digits)] in ".¥":
+                lbl = QLabel(value[len(self.digits)])
+                lbl.setStyleSheet("color: white; font-size: 110px; font-weight: bold; margin-bottom: 20px;")
+                lbl.setFixedWidth(40)
+                self.layout.addWidget(lbl)
+                self.digits.append(lbl)
+            else:
+                d = RollingDigit()
+                self.layout.addWidget(d)
+                self.digits.append(d)
         
-        # Update digits
-        for char, widget in zip(value, self.digits):
-            if isinstance(widget, RollingDigit):
-                widget.setDigit(char)
+        for i, char in enumerate(value):
+            if isinstance(self.digits[i], RollingDigit) and char.isdigit():
+                self.digits[i].setDigit(char)
+            elif isinstance(self.digits[i], QLabel):
+                self.digits[i].setText(char)
+        self._value = value
 
 class TrendChart(QWidget):
-    """A smooth sparkline chart."""
+    """A smooth line chart for price history."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(150)
         self.history = []
-        self.color = QColor("#444444")
+        self.setMinimumHeight(200)
 
-    def addValue(self, val: float, is_up: bool):
-        self.history.append(val)
-        if len(self.history) > 40: self.history.pop(0)
-        self.color = QColor("#FF3B30") if is_up else QColor("#34C759")
+    def addData(self, price: float):
+        self.history.append(price)
+        if len(self.history) > 100: self.history.pop(0)
         self.update()
 
     def paintEvent(self, event):
         if len(self.history) < 2: return
-        
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         w, h = self.width(), self.height()
-        max_v = max(self.history)
-        min_v = min(self.history)
-        rng = max(max_v - min_v, 1.0)
+        min_p, max_p = min(self.history), max(self.history)
+        p_range = max_p - min_p if max_p != min_p else 1.0
         
+        # Add padding
+        min_p -= p_range * 0.1
+        max_p += p_range * 0.1
+        p_range = max_p - min_p
+
         path = QPainterPath()
-        for i, v in enumerate(self.history):
-            x = (i / (len(self.history) - 1)) * w
-            y = h - ((v - min_v) / rng) * (h - 20) - 10
+        gradient = QLinearGradient(0, 0, 0, h)
+        
+        # Set color based on overall trend
+        is_up = self.history[-1] >= self.history[0]
+        color = QColor("#FF3B30") if is_up else QColor("#34C759")
+        
+        pen = QPen(color, 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+
+        for i, p in enumerate(self.history):
+            x = i * (w / (len(self.history) - 1))
+            y = h - ((p - min_p) / p_range) * h
             if i == 0: path.moveTo(x, y)
             else: path.lineTo(x, y)
-            
-        # Draw gradient area
+
+        painter.drawPath(path)
+        
+        # Fill area under path
         fill_path = QPainterPath(path)
         fill_path.lineTo(w, h)
         fill_path.lineTo(0, h)
         fill_path.closeSubpath()
         
-        grad = QLinearGradient(0, 0, 0, h)
-        c = QColor(self.color)
-        c.setAlpha(40)
-        grad.setColorAt(0, c)
-        c.setAlpha(0)
-        grad.setColorAt(1, c)
-        painter.fillPath(fill_path, grad)
-        
-        # Draw line
-        pen = QPen(self.color, 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
-        painter.drawPath(path)
+        gradient.setColorAt(0, QColor(color.red(), color.green(), color.blue(), 60))
+        gradient.setColorAt(1, QColor(color.red(), color.green(), color.blue(), 0))
+        painter.fillPath(fill_path, gradient)
 
 class GoldPriceWorker(QThread):
     """Worker thread to fetch gold price data every 5 seconds."""
@@ -205,7 +207,7 @@ class ScreenSaverWindow(QMainWindow):
         
         # Configure window properties
         self.setWindowTitle("实时金价windows屏保")
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.X11BypassWindowManagerHint)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         
         if not self.is_preview:
             self.showFullScreen()
@@ -223,101 +225,79 @@ class ScreenSaverWindow(QMainWindow):
         """Initialize a sleek iOS-like UI with pure black background."""
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        self.central_widget.setStyleSheet("background-color: #000000;") # Pure black
+        self.central_widget.setStyleSheet("background-color: #000000;")
         
         self.main_layout = QVBoxLayout(self.central_widget)
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.main_layout.setContentsMargins(100, 100, 100, 100)
+        self.main_layout.setSpacing(40)
         
-        # Main Container
-        self.content_container = QWidget()
-        self.content_container.setFixedSize(1000, 700)
-        self.container_layout = QVBoxLayout(self.content_container)
-        self.container_layout.setContentsMargins(50, 50, 50, 50)
-        self.container_layout.setSpacing(0)
-        
-        # Title
+        # Header: Title and Time
+        self.header_layout = QHBoxLayout()
         self.title_label = QLabel("京东金融 · 实时金价")
-        self.title_label.setStyleSheet("color: #666666; font-size: 24px; font-weight: 400; font-family: 'Segoe UI Variable Display', 'Inter';")
-        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title_label.setStyleSheet("color: #666666; font-size: 28px; font-weight: 500;")
+        self.time_label = QLabel("")
+        self.time_label.setStyleSheet("color: #444444; font-size: 24px;")
+        self.header_layout.addWidget(self.title_label)
+        self.header_layout.addStretch()
+        self.header_layout.addWidget(self.time_label)
         
-        # Rolling Price
+        # Price Area
         self.price_widget = RollingNumber()
         
-        # Change Info
-        self.change_label = QLabel("正在同步...")
-        self.change_label.setStyleSheet("color: #444444; font-size: 36px; font-weight: 500;")
-        self.change_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
         # Trend Chart
-        self.trend_chart = TrendChart()
-        self.trend_chart.setFixedWidth(800)
+        self.chart = TrendChart()
         
-        # Bottom Info
-        self.bottom_info = QWidget()
-        self.bottom_layout = QVBoxLayout(self.bottom_info)
-        self.bottom_layout.setSpacing(5)
-        
-        self.time_label = QLabel("")
-        self.time_label.setStyleSheet("color: #333333; font-size: 16px;")
-        self.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
+        # Change & Info
+        self.info_layout = QHBoxLayout()
+        self.change_label = QLabel("正在同步数据...")
+        self.change_label.setStyleSheet("color: #444444; font-size: 36px; font-weight: 600;")
         self.disclaimer_label = QLabel("数据仅供参考，不构成投资建议。")
-        self.disclaimer_label.setStyleSheet("color: #222222; font-size: 12px;")
-        self.disclaimer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.disclaimer_label.setStyleSheet("color: #222222; font-size: 14px;")
+        self.info_layout.addWidget(self.change_label)
+        self.info_layout.addStretch()
+        self.info_layout.addWidget(self.disclaimer_label, alignment=Qt.AlignmentFlag.AlignBottom)
         
-        self.bottom_layout.addWidget(self.time_label)
-        self.bottom_layout.addWidget(self.disclaimer_label)
-        
-        self.container_layout.addWidget(self.title_label)
-        self.container_layout.addStretch(1)
-        self.container_layout.addWidget(self.price_widget, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.container_layout.addWidget(self.change_label)
-        self.container_layout.addSpacing(40)
-        self.container_layout.addWidget(self.trend_chart, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.container_layout.addStretch(1)
-        self.container_layout.addWidget(self.bottom_info)
-        
-        self.main_layout.addWidget(self.content_container)
+        self.main_layout.addLayout(self.header_layout)
+        self.main_layout.addStretch(1)
+        self.main_layout.addWidget(self.price_widget, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.main_layout.addStretch(1)
+        self.main_layout.addWidget(self.chart)
+        self.main_layout.addLayout(self.info_layout)
 
     def update_price(self, data: Dict[str, Any]) -> None:
-        """Update UI with rolling animation and trend chart."""
+        """Update the UI with rolling numbers and chart."""
         price_str = data.get("price", "0.00")
+        price_val = float(price_str)
+        
+        # Update rolling number
         self.price_widget.setValue(f"¥{price_str}")
         
+        # Update chart
+        self.chart.addData(price_val)
+        
+        # Update change info
         rate = data.get("upAndDownRate", "+0.00%")
         amt = data.get("upAndDownAmt", "+0.00")
-        
         is_up = "+" in rate
         color = "#FF3B30" if is_up else "#34C759"
         indicator = "↑" if is_up else "↓"
         
         self.change_label.setText(f"{indicator} {rate}  {amt}")
-        self.change_label.setStyleSheet(f"color: {color}; font-size: 32px; font-weight: 600;")
-        self.time_label.setText(f"Last Sync: {time.strftime('%H:%M:%S')}")
-        
-        # Update Trend Chart
-        try:
-            val = float(price_str.replace(",", ""))
-            self.trend_chart.addValue(val, is_up)
-        except: pass
+        self.change_label.setStyleSheet(f"color: {color}; font-size: 36px; font-weight: 600;")
+        self.time_label.setText(time.strftime('%H:%M:%S'))
 
     def handle_error(self, error_msg: str) -> None:
-        self.change_label.setText("Connecting...")
+        self.change_label.setText("数据同步中...")
         self.change_label.setStyleSheet("color: #333333; font-size: 24px;")
 
     def close_and_exit(self) -> None:
-        """Safely stop worker and force immediate exit."""
-        try:
-            if hasattr(self, 'worker') and self.worker.isRunning():
-                self.worker.stop()
-                self.worker.wait(500)
-            self.hide() # Hide window immediately to avoid visual lag
-            QApplication.processEvents()
-            QApplication.quit()
-        finally:
-            import os
-            os._exit(0) # Force kill process to prevent any residual windows
+        """Safely stop the worker thread and exit the application."""
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            self.worker.stop()
+            self.worker.wait(1000) # Wait up to 1s
+        QApplication.quit()
+        # Force exit if quit() is not enough
+        sys.exit(0)
 
     # --- Screen Saver Exit Triggers ---
     
