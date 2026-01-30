@@ -4,11 +4,11 @@ import time
 from typing import Optional, Dict, Any
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QLabel, 
-    QWidget, QFrame, QGraphicsDropShadowEffect
+    QWidget, QFrame, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 )
 from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QPropertyAnimation, 
-    QEasingCurve, QPoint, QSize
+    QEasingCurve, QPoint, QSize, QParallelAnimationGroup, QSequentialAnimationGroup
 )
 from PySide6.QtGui import QFont, QColor, QMouseEvent, QKeyEvent, QScreen
 
@@ -66,9 +66,13 @@ class ScreenSaverWindow(QMainWindow):
         
         if not self.is_preview:
             self.showFullScreen()
-            self.setCursor(Qt.CursorShape.BlankCursor) # Hide cursor in full screen
+            self.setCursor(Qt.CursorShape.BlankCursor)
         
         self.init_ui()
+        
+        # Start drift animation (Screen Burn-in Protection)
+        if not self.is_preview:
+            self.start_drift_animation()
         
         # Start worker thread
         self.worker = GoldPriceWorker()
@@ -77,88 +81,144 @@ class ScreenSaverWindow(QMainWindow):
         self.worker.start()
 
     def init_ui(self) -> None:
-        """Initialize a modern UI with dark theme."""
+        """Initialize a sleek iOS-like UI with pure black background."""
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        self.central_widget.setStyleSheet("background-color: #0f172a;") # Dark blue-black background
+        self.central_widget.setStyleSheet("background-color: #000000;") # Pure black for OLED
         
-        self.layout = QVBoxLayout(self.central_widget)
-        self.layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Main Container (this will drift)
+        self.content_container = QWidget(self.central_widget)
+        self.content_container.setFixedSize(900, 600)
+        self.content_container.move(
+            (self.width() - 900) // 2 if self.width() > 900 else 0,
+            (self.height() - 600) // 2 if self.height() > 600 else 0
+        )
         
-        # Main Container for Content
-        self.container = QFrame()
-        self.container.setFixedSize(800, 500)
-        self.container.setStyleSheet("""
-            QFrame {
-                background-color: rgba(30, 41, 59, 0.7);
-                border-radius: 30px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
-        """)
-        
-        # Shadow effect for container
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(50)
-        shadow.setColor(QColor(0, 0, 0, 150))
-        shadow.setOffset(0, 10)
-        self.container.setGraphicsEffect(shadow)
-        
-        self.container_layout = QVBoxLayout(self.container)
+        self.container_layout = QVBoxLayout(self.content_container)
         self.container_layout.setContentsMargins(50, 50, 50, 50)
-        self.container_layout.setSpacing(20)
+        self.container_layout.setSpacing(10)
+        self.container_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Title
-        self.title_label = QLabel("京东黄金 - 实时金价")
-        self.title_label.setStyleSheet("color: #94a3b8; font-size: 24px; font-weight: 300;")
+        self.title_label = QLabel("京东金融 · 实时金价")
+        self.title_label.setStyleSheet("color: #666666; font-size: 24px; font-weight: 400; font-family: 'Segoe UI Variable Display', 'Inter', sans-serif;")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Price Label
         self.price_label = QLabel("--.--")
-        self.price_label.setStyleSheet("color: #f8fafc; font-size: 120px; font-weight: bold;")
+        self.price_label.setStyleSheet("color: #FFFFFF; font-size: 160px; font-weight: 700; font-family: 'Segoe UI Variable Display', 'Inter', sans-serif;")
         self.price_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # Change Info (Rate and Amount)
-        self.change_label = QLabel("正在加载数据...")
-        self.change_label.setStyleSheet("color: #64748b; font-size: 32px; font-weight: 500;")
+        # Opacity effect for price animation
+        self.price_opacity = QGraphicsOpacityEffect(self.price_label)
+        self.price_label.setGraphicsEffect(self.price_opacity)
+        self.price_opacity.setOpacity(1.0)
+        
+        # Change Info
+        self.change_label = QLabel("正在同步...")
+        self.change_label.setStyleSheet("color: #444444; font-size: 36px; font-weight: 500;")
         self.change_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # Update Time
-        self.time_label = QLabel(f"最后更新: {time.strftime('%H:%M:%S')}")
-        self.time_label.setStyleSheet("color: #475569; font-size: 18px;")
+        # Bottom Disclaimer & Time
+        self.bottom_info = QWidget()
+        self.bottom_layout = QVBoxLayout(self.bottom_info)
+        
+        self.time_label = QLabel("")
+        self.time_label.setStyleSheet("color: #333333; font-size: 16px;")
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
+        self.disclaimer_label = QLabel("数据仅供参考，不构成投资建议。")
+        self.disclaimer_label.setStyleSheet("color: #222222; font-size: 12px;")
+        self.disclaimer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.bottom_layout.addWidget(self.time_label)
+        self.bottom_layout.addWidget(self.disclaimer_label)
+        
         self.container_layout.addWidget(self.title_label)
+        self.container_layout.addStretch()
         self.container_layout.addWidget(self.price_label)
         self.container_layout.addWidget(self.change_label)
         self.container_layout.addStretch()
-        self.container_layout.addWidget(self.time_label)
+        self.container_layout.addWidget(self.bottom_info)
+
+    def start_drift_animation(self) -> None:
+        """Slow drifting animation to prevent screen burn-in."""
+        self.drift_anim = QPropertyAnimation(self.content_container, b"pos")
+        self.drift_anim.setDuration(30000) # 30 seconds per cycle
+        self.drift_anim.setEasingCurve(QEasingCurve.Type.InOutSine)
         
-        self.layout.addWidget(self.container)
+        screen_w = self.width() if self.width() > 0 else 1920
+        screen_h = self.height() if self.height() > 0 else 1080
+        
+        # Define 4 corners of a small drift box
+        center_x = (screen_w - self.content_container.width()) // 2
+        center_y = (screen_h - self.content_container.height()) // 2
+        offset = 40
+        
+        self.drift_group = QSequentialAnimationGroup()
+        points = [
+            QPoint(center_x - offset, center_y - offset),
+            QPoint(center_x + offset, center_y - offset),
+            QPoint(center_x + offset, center_y + offset),
+            QPoint(center_x - offset, center_y + offset)
+        ]
+        
+        for i in range(len(points)):
+            anim = QPropertyAnimation(self.content_container, b"pos")
+            anim.setDuration(20000)
+            anim.setStartValue(points[i])
+            anim.setEndValue(points[(i + 1) % len(points)])
+            anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            self.drift_group.addAnimation(anim)
+            
+        self.drift_group.setLoopCount(-1)
+        self.drift_group.start()
 
     def update_price(self, data: Dict[str, Any]) -> None:
-        """Update the UI with new gold price data."""
+        """Update the UI with iOS-style fade animation."""
+        new_price = f"¥{data.get('price', '0.00')}"
+        if self.price_label.text() == new_price:
+            return
+
+        # Fade out -> Update -> Fade in
+        self.fade_anim = QSequentialAnimationGroup()
+        
+        fade_out = QPropertyAnimation(self.price_opacity, b"opacity")
+        fade_out.setDuration(400)
+        fade_out.setStartValue(1.0)
+        fade_out.setEndValue(0.0)
+        fade_out.setEasingCurve(QEasingCurve.Type.OutCubic)
+        
+        fade_in = QPropertyAnimation(self.price_opacity, b"opacity")
+        fade_in.setDuration(600)
+        fade_in.setStartValue(0.0)
+        fade_in.setEndValue(1.0)
+        fade_in.setEasingCurve(QEasingCurve.Type.InBack)
+        
+        fade_out.finished.connect(lambda: self._apply_price_update(data))
+        
+        self.fade_anim.addAnimation(fade_out)
+        self.fade_anim.addAnimation(fade_in)
+        self.fade_anim.start()
+
+    def _apply_price_update(self, data: Dict[str, Any]) -> None:
         price = data.get("price", "0.00")
         rate = data.get("upAndDownRate", "+0.00%")
         amt = data.get("upAndDownAmt", "+0.00")
         
-        # Update price with animation? (Optional)
         self.price_label.setText(f"¥{price}")
         
-        # Handle color based on change (In China, Red is UP, Green is DOWN)
         is_up = "+" in rate
-        color = "#ef4444" if is_up else "#22c55e" # Red-500 or Green-500
-        indicator = "▲" if is_up else "▼"
+        color = "#FF3B30" if is_up else "#34C759" # iOS Red and Green
+        indicator = "↑" if is_up else "↓"
         
-        self.change_label.setText(f"{indicator} {rate} ({amt})")
-        self.change_label.setStyleSheet(f"color: {color}; font-size: 32px; font-weight: 500;")
-        
-        self.time_label.setText(f"最后更新: {time.strftime('%H:%M:%S')}")
+        self.change_label.setText(f"{indicator} {rate}  {amt}")
+        self.change_label.setStyleSheet(f"color: {color}; font-size: 32px; font-weight: 600; font-family: 'Segoe UI Variable Display', sans-serif;")
+        self.time_label.setText(f"Last Sync: {time.strftime('%H:%M:%S')}")
 
     def handle_error(self, error_msg: str) -> None:
-        """Log error or show in UI."""
-        print(f"Error: {error_msg}")
-        self.change_label.setText("数据连接异常")
-        self.change_label.setStyleSheet("color: #94a3b8; font-size: 24px;")
+        self.change_label.setText("Connecting...")
+        self.change_label.setStyleSheet("color: #333333; font-size: 24px;")
 
     def close_and_exit(self) -> None:
         """Safely stop the worker thread and exit the application."""
