@@ -331,11 +331,14 @@ class ScreenSaverWindow(QMainWindow):
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if not self.is_preview:
-            # First mouse move might happen on window show
+            # Capture initial position to avoid exit on first fake move event
             current_pos = event.globalPosition().toPoint()
             if self.last_mouse_pos is None:
                 self.last_mouse_pos = current_pos
-            elif (current_pos - self.last_mouse_pos).manhattanLength() > 15:
+                return
+            
+            # Exit on any intentional movement (>2 pixels)
+            if (current_pos - self.last_mouse_pos).manhattanLength() > 2:
                 self.close_and_exit()
         super().mouseMoveEvent(event)
 
