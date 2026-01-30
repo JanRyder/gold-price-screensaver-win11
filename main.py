@@ -15,7 +15,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QFont, QColor, QMouseEvent, QKeyEvent, QScreen, 
-    QPainter, QPen, QPainterPath, QLinearGradient, QGradient
+    QPainter, QPen, QPainterPath, QLinearGradient, QGradient, QCursor
 )
 
 # API URL for Gold Price
@@ -124,20 +124,66 @@ class TrendChart(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.history = []
+        self._prev_series = []
+        self._target_series = []
+        self._t = 1.0
+        self._series_anim = QPropertyAnimation(self, b"anim_t")
+        self._series_anim.setDuration(900)
+        self._series_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.setMinimumHeight(200)
 
+    @Property(float)
+    def anim_t(self):
+        return self._t
+
+    @anim_t.setter
+    def anim_t(self, value: float):
+        self._t = value
+        self.update()
+
     def addData(self, price: float):
+        if not self.history:
+            self.history = [price]
+            self._prev_series = [price]
+            self._target_series = [price]
+            self._t = 1.0
+            self.update()
+            return
+
+        current_series = self._target_series if self._target_series else self.history
+        self._prev_series = list(current_series)
+
         self.history.append(price)
         if len(self.history) > 100: self.history.pop(0)
+        self._target_series = list(self.history)
+
+        if len(self._prev_series) < len(self._target_series):
+            pad = [self._prev_series[0]] * (len(self._target_series) - len(self._prev_series))
+            self._prev_series = pad + self._prev_series
+        elif len(self._prev_series) > len(self._target_series):
+            self._prev_series = self._prev_series[-len(self._target_series):]
+
+        self._series_anim.stop()
+        self._t = 0.0
+        self._series_anim.setStartValue(0.0)
+        self._series_anim.setEndValue(1.0)
+        self._series_anim.start()
         self.update()
 
     def paintEvent(self, event):
-        if len(self.history) < 2: return
+        if len(self.history) < 2:
+            return
+
+        if self._target_series and self._prev_series and self._t < 1.0:
+            series = [a + (b - a) * self._t for a, b in zip(self._prev_series, self._target_series)]
+        else:
+            series = self.history
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         w, h = self.width(), self.height()
-        min_p, max_p = min(self.history), max(self.history)
+        min_p, max_p = min(series), max(series)
         p_range = max_p - min_p if max_p != min_p else 1.0
         
         # Add padding
@@ -155,8 +201,8 @@ class TrendChart(QWidget):
         pen = QPen(color, 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
 
-        for i, p in enumerate(self.history):
-            x = i * (w / (len(self.history) - 1))
+        for i, p in enumerate(series):
+            x = i * (w / (len(series) - 1))
             y = h - ((p - min_p) / p_range) * h
             if i == 0: path.moveTo(x, y)
             else: path.lineTo(x, y)
@@ -215,6 +261,7 @@ class ScreenSaverWindow(QMainWindow):
         self.is_preview = is_preview
         self.run_worker = run_worker
         self.last_mouse_pos: Optional[QPoint] = None
+        self._cursor_last_pos: Optional[QPoint] = None
         
         # Configure window properties
         self.setWindowTitle("实时金价windows屏保")
@@ -225,6 +272,17 @@ class ScreenSaverWindow(QMainWindow):
             self.setCursor(Qt.CursorShape.BlankCursor)
         
         self.init_ui()
+
+        self.setMouseTracking(True)
+        self.central_widget.setMouseTracking(True)
+        for w in (self.price_widget, self.chart):
+            w.setMouseTracking(True)
+
+        if not self.is_preview:
+            self._cursor_timer = QTimer(self)
+            self._cursor_timer.setInterval(50)
+            self._cursor_timer.timeout.connect(self._poll_cursor)
+            self._cursor_timer.start()
         
         # Only start worker thread on the main window to save resources and avoid exit issues
         if self.run_worker:
@@ -304,17 +362,31 @@ class ScreenSaverWindow(QMainWindow):
         self.change_label.setText("数据同步中...")
         self.change_label.setStyleSheet("color: #333333; font-size: 24px;")
 
+    def _poll_cursor(self) -> None:
+        if self.is_preview:
+            return
+        pos = QCursor.pos()
+        if self._cursor_last_pos is None:
+            self._cursor_last_pos = pos
+            return
+        if pos != self._cursor_last_pos:
+            self.close_and_exit()
+
     def close_and_exit(self) -> None:
         """Safely stop all worker threads and force terminate the process."""
-        # Hide all windows immediately to give immediate feedback
+        if hasattr(self, "_cursor_timer"):
+            self._cursor_timer.stop()
+
+        if hasattr(self, "worker") and self.worker.isRunning():
+            self.worker.stop()
+            self.worker.wait(300)
+
         for widget in QApplication.topLevelWidgets():
             if isinstance(widget, QMainWindow):
-                widget.hide()
+                widget.close()
         
-        # Stop workers and exit
-        QApplication.processEvents() # Flush hide events
+        QApplication.processEvents()
         
-        # Aggressive exit to prevent hanging processes
         os._exit(0)
 
     # --- Screen Saver Exit Triggers ---
