@@ -12,6 +12,12 @@
 - **[点击下载 GoldPriceSaver.scr](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver.scr)**
   > 下载后右键点击文件，选择“安装”即可使用。
 
+### ✅ 彻底去掉 “(2) 进程” 的版本（推荐）
+如果你不希望任务管理器中显示 `GoldPriceSaver.scr (2)`（PyInstaller onefile 在 Windows 的正常行为），请使用 **便携版（单进程）**：
+- **[点击下载 GoldPriceSaver-portable.zip](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver-portable.zip)**
+  - 解压后运行 `Install-Screensaver.ps1`，它会把屏保路径写入注册表（无需复制到 System32）
+  - Windows 会从该路径启动屏保，进程只显示 1 个
+
 ### ⚠️ 无法安装/打开的解决方法
 如果你遇到“Windows 已保护你的电脑”或无法双击打开的情况，请尝试：
 1. **解除锁定**：右键点击下载的 `GoldPriceSaver.scr` -> 属性 -> 勾选底部的“**解除锁定**” (Unblock) -> 确定。
@@ -71,6 +77,11 @@ A beautiful, PySide6-based Windows 11 style real-time gold price screensaver. **
 ### 🚀 Direct Download
 - **[Download GoldPriceSaver.scr](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver.scr)**
   > After downloading, right-click the file and select "Install" to use.
+
+### ✅ Portable (Single-process) Build
+If you don't want to see `GoldPriceSaver.scr (2)` in Task Manager (expected behavior of PyInstaller onefile on Windows), use the **portable single-process build**:
+- **[Download GoldPriceSaver-portable.zip](https://github.com/JanRyder/gold-price-screensaver-win11/raw/main/GoldPriceSaver-portable.zip)**
+  - Unzip and run `Install-Screensaver.ps1` to register the `.scr` path via registry (no need to copy into System32)
 
 ### ⚖️ Legal Disclaimer
 - **Data Source**: Data is fetched from JD Finance public API. For educational and personal use only.
