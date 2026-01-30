@@ -182,6 +182,7 @@ class ScreenSaverWindow(QMainWindow):
         super().__init__()
         self.is_preview = is_preview
         self.last_mouse_pos: Optional[QPoint] = None
+        self.start_time = time.time()
         
         # Configure window properties
         self.setWindowTitle("实时金价windows屏保")
@@ -321,14 +322,9 @@ class ScreenSaverWindow(QMainWindow):
         """Safely stop the worker thread and exit the application."""
         if hasattr(self, 'worker') and self.worker.isRunning():
             self.worker.stop()
-            self.worker.wait(1000)
+            self.worker.wait(500)
         
-        # Ensure all resources are cleaned up
-        QApplication.quit()
-        
-        # Kill the current process completely
-        import os, signal
-        os.kill(os.getpid(), signal.SIGTERM)
+        QApplication.instance().quit()
         sys.exit(0)
 
     # --- Screen Saver Exit Triggers ---
@@ -345,11 +341,17 @@ class ScreenSaverWindow(QMainWindow):
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if not self.is_preview:
-            # Immediate exit on mouse move
+            # Avoid exiting immediately on launch due to system-generated mouse events
+            if time.time() - self.start_time < 1.0:
+                return
+                
             current_pos = event.globalPosition().toPoint()
             if self.last_mouse_pos is None:
                 self.last_mouse_pos = current_pos
-            else:
+                return
+
+            # Use a small threshold (10 pixels) to avoid micro-movements/vibrations
+            if (current_pos - self.last_mouse_pos).manhattanLength() > 10:
                 self.close_and_exit()
         super().mouseMoveEvent(event)
 
