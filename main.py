@@ -262,10 +262,15 @@ class ScreenSaverWindow(QMainWindow):
         self.run_worker = run_worker
         self.last_mouse_pos: Optional[QPoint] = None
         self._cursor_last_pos: Optional[QPoint] = None
+        self._exiting = False
         
         # Configure window properties
         self.setWindowTitle("实时金价windows屏保")
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
+        )
         
         if not self.is_preview:
             self.showFullScreen()
@@ -363,7 +368,7 @@ class ScreenSaverWindow(QMainWindow):
         self.change_label.setStyleSheet("color: #333333; font-size: 24px;")
 
     def _poll_cursor(self) -> None:
-        if self.is_preview:
+        if self.is_preview or self._exiting:
             return
         pos = QCursor.pos()
         if self._cursor_last_pos is None:
@@ -374,20 +379,24 @@ class ScreenSaverWindow(QMainWindow):
 
     def close_and_exit(self) -> None:
         """Safely stop all worker threads and force terminate the process."""
+        if self._exiting:
+            return
+        self._exiting = True
+
         if hasattr(self, "_cursor_timer"):
             self._cursor_timer.stop()
 
         if hasattr(self, "worker") and self.worker.isRunning():
             self.worker.stop()
-            self.worker.wait(300)
+            self.worker.wait(800)
 
         for widget in QApplication.topLevelWidgets():
             if isinstance(widget, QMainWindow):
                 widget.close()
         
         QApplication.processEvents()
-        
-        os._exit(0)
+        QTimer.singleShot(0, QApplication.quit)
+        QTimer.singleShot(1500, lambda: os._exit(0))
 
     # --- Screen Saver Exit Triggers ---
     
