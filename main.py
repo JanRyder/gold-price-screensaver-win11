@@ -1,4 +1,5 @@
 import sys
+import os
 import requests
 import time
 from typing import Optional, Dict, Any
@@ -29,8 +30,8 @@ class RollingDigit(QWidget):
         super().__init__(parent)
         self._current_digit = "0"
         self._offset = 0.0
-        self.setFixedWidth(60)
-        self.setFixedHeight(180)
+        self.setFixedWidth(85) # Increased from 60 to prevent clipping
+        self.setFixedHeight(200) # Increased from 180
         self.anim = QPropertyAnimation(self, b"offset")
         self.anim.setDuration(800)
         self.anim.setEasingCurve(QEasingCurve.Type.OutExpo)
@@ -92,10 +93,13 @@ class RollingNumber(QWidget):
         
         # Sync digits
         while len(self.digits) < len(value):
-            if value[len(self.digits)] in ".¥":
-                lbl = QLabel(value[len(self.digits)])
-                lbl.setStyleSheet("color: white; font-size: 110px; font-weight: bold; margin-bottom: 20px;")
-                lbl.setFixedWidth(40)
+            idx = len(self.digits)
+            char = value[idx]
+            if char in ".¥":
+                lbl = QLabel(char)
+                lbl.setStyleSheet("color: white; font-size: 110px; font-weight: bold; margin-bottom: 25px;")
+                lbl.setFixedWidth(50) # Slightly wider
+                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.layout.addWidget(lbl)
                 self.digits.append(lbl)
             else:
@@ -292,13 +296,17 @@ class ScreenSaverWindow(QMainWindow):
         self.change_label.setStyleSheet("color: #333333; font-size: 24px;")
 
     def close_and_exit(self) -> None:
-        """Safely stop the worker thread and exit the application."""
-        if hasattr(self, 'worker') and self.worker.isRunning():
-            self.worker.stop()
-            self.worker.wait(1000) # Wait up to 1s
-        QApplication.quit()
-        # Force exit if quit() is not enough
-        sys.exit(0)
+        """Safely stop all worker threads and force terminate the process."""
+        # Hide all windows immediately to give immediate feedback
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, QMainWindow):
+                widget.hide()
+        
+        # Stop workers and exit
+        QApplication.processEvents() # Flush hide events
+        
+        # Aggressive exit to prevent hanging processes
+        os._exit(0)
 
     # --- Screen Saver Exit Triggers ---
     
