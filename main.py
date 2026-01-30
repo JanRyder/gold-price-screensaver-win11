@@ -4,7 +4,8 @@ import time
 from typing import Optional, Dict, Any
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, 
-    QWidget, QFrame, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
+    QWidget, QFrame, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
+    QMessageBox
 )
 from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QPropertyAnimation, 
@@ -325,27 +326,53 @@ def main():
     app = QApplication(sys.argv)
     
     # Handle Windows Screen Saver arguments
-    # /s: Start the screensaver
-    # /p: Preview in the screen saver selection dialog (needs to handle window embedding, skipped for simplicity)
-    # /c: Configure (not implemented)
+    # /s: Start the screensaver (Full screen)
+    # /p: Preview in the screen saver selection dialog
+    # /c: Configure
     
     args = sys.argv[1:]
-    is_preview = False
+    mode = "run" # default
     
     if args:
-        first_arg = args[0].lower()
-        if first_arg.startswith("/p"):
-            # Preview mode (usually followed by a window handle)
-            is_preview = True
-        elif first_arg.startswith("/c"):
-            # Configure mode - we can just exit or show a message
-            sys.exit(0)
-        elif first_arg.startswith("/s"):
-            # Normal start
-            pass
+        arg = args[0].lower()
+        if arg.startswith("/p"): mode = "preview"
+        elif arg.startswith("/c"): mode = "config"
+        elif arg.startswith("/s"): mode = "saver"
 
-    window = ScreenSaverWindow(is_preview=is_preview)
-    window.show()
+    if mode == "config":
+        QMessageBox.information(None, "设置", "实时金价屏保目前无需额外配置。\n数据每 5 秒自动同步自京东金融。")
+        sys.exit(0)
+
+    if mode == "preview":
+        # In a real preview, we should embed into the passed HWND.
+        # For now, just show a small window to avoid crashing.
+        window = ScreenSaverWindow(is_preview=True)
+        window.setFixedSize(400, 300)
+        window.show()
+        sys.exit(app.exec())
+
+    # Multi-monitor support for 'saver' or 'run' mode
+    screens = app.screens()
+    windows = []
+    
+    for i, screen in enumerate(screens):
+        is_main = (i == 0)
+        win = ScreenSaverWindow(is_preview=False)
+        
+        # Position the window on the specific screen
+        geom = screen.geometry()
+        win.setGeometry(geom)
+        
+        if is_main:
+            # Only the main window needs the API worker to avoid redundant requests
+            pass
+        else:
+            # Secondary windows can just display a static message or copy the main one
+            # For simplicity, we'll let all windows have their own worker for now
+            pass
+            
+        win.showFullScreen()
+        windows.append(win)
     
     sys.exit(app.exec())
 
